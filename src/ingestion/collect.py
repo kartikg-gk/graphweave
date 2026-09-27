@@ -32,6 +32,8 @@ beats quiet and short.
 
 from __future__ import annotations
 
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Iterable
 
 import httpx
@@ -45,6 +47,11 @@ PerPullRequestFetch = Callable[[httpx.Client, str, int], Iterable[Any]]
 #: that lost its file lists.
 STAGE_REVIEWS = "reviews"
 STAGE_CHANGED_FILES = "changed_files"
+
+#: Pull requests fetched at once. Each one is a separate request, and waiting
+#: for them one after another made enrichment the slowest part of a run. The
+#: client is shared: ``httpx.Client`` is safe to use from several threads.
+DETAIL_WORKERS = 8
 
 
 def collect_by_pull_request(
@@ -69,18 +76,43 @@ def collect_by_pull_request(
     The exception carries ``reset_at``, so the caller that aborts can say when
     the run could be tried again.
     """
+    numbers = list(numbers)
     results: dict[int, list] = {}
     failures = 0
+    if not numbers:
+        return results, failures
 
-    for number in numbers:
+    limited = threading.Event()
+
+    def one(number: int) -> list | None:
+        # Once any request has hit the rate limit, the rest would too: a
+        # pull request not yet started is skipped rather than sent.
+        if limited.is_set():
+            return None
         try:
-            results[number] = list(fetch(session, repo, number))
+            return list(fetch(session, repo, number))
         except GitHubRateLimitError:
-            # Caught before GitHubError below, which it subclasses. Ordering is
-            # the whole mechanism here: reversing these two lines restores the
-            # silent-truncation bug with no other visible change.
+            limited.set()
             raise
-        except GitHubError:
-            failures += 1
+
+    pool = ThreadPoolExecutor(max_workers=min(DETAIL_WORKERS, len(numbers)))
+    try:
+        futures = [(number, pool.submit(one, number)) for number in numbers]
+        for number, future in futures:
+            try:
+                rows = future.result()
+                if rows is not None:
+                    results[number] = rows
+            except GitHubRateLimitError:
+                # Caught before GitHubError below, which it subclasses. Ordering
+                # is the whole mechanism here: reversing these two lines
+                # restores the silent-truncation bug with no other visible
+                # change. Requests not yet started are cancelled.
+                pool.shutdown(wait=True, cancel_futures=True)
+                raise
+            except GitHubError:
+                failures += 1
+    finally:
+        pool.shutdown(wait=True)
 
     return results, failures

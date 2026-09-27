@@ -19,6 +19,7 @@ from .ingestion import (
     fetch_issues, fetch_pull_requests, fetch_repository, fetch_reviews,
     in_ingest_order, make_session,
 )
+from .ingestion.github import PER_PAGE
 from .knowledge import GraphBuilder
 from .knowledge.documents import source_documents
 from .tracing import (
@@ -43,13 +44,20 @@ def _answer_excerpt(item: TraceItem) -> str:
     return f"{item.label}: {body[:120].rstrip()}" if body else str(item.label)
 
 
+def _page_size(limit: int) -> int:
+    """One page that holds exactly the items asked for, within GitHub's cap."""
+    return max(1, min(PER_PAGE, limit))
+
+
 def fetch_graph(repo: str, *, prs: int, issues: int, commits: int,
                 files: bool, reviews: bool, session):
     """Use the existing ingestion path without opening a database."""
     repository = fetch_repository(session, repo)
-    pulls = in_ingest_order(fetch_pull_requests(session, repo, limit=prs))
+    pulls = in_ingest_order(fetch_pull_requests(
+        session, repo, limit=prs, per_page=_page_size(prs)))
     tickets = in_ingest_order(fetch_issues(session, repo, limit=issues))
-    history = in_ingest_order(fetch_commits(session, repo, limit=commits))
+    history = in_ingest_order(fetch_commits(
+        session, repo, limit=commits, per_page=_page_size(commits)))
     numbers = [pull.number for pull in pulls]
     review_rows, review_failures = (
         collect_by_pull_request(fetch_reviews, session, repo, numbers)

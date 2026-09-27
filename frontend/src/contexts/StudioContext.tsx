@@ -260,25 +260,29 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
       if (epoch !== queryEpoch.current) return;
     }
 
+    // Set when the trace fails after the answer started: the failure message
+    // and sample trace then own the panel, and the stream must not overwrite them.
+    let abandoned = false;
     try {
       // The answer needs only the trace's context, not the subgraph, so it
       // starts streaming as soon as the trace returns.
       let answering: Promise<void> | null = null;
+      const current = () => epoch === queryEpoch.current && !abandoned;
       const startAnswer = (context: string) => {
         if (epoch !== queryEpoch.current || !context?.trim()) return;
         setAnswer("");
         setAnswerStreaming(true);
         answering = streamAnswer(query, context, (text) => {
-          if (epoch === queryEpoch.current) setAnswer(text);
+          if (current()) setAnswer(text);
         })
           .then(() => undefined)
           .catch((error) => {
-            if (epoch !== queryEpoch.current) return;
+            if (!current()) return;
             console.error("[graphRAG] Answer stream failed", error);
             setAnswer(null);
           })
           .finally(() => {
-            if (epoch === queryEpoch.current) setAnswerStreaming(false);
+            if (current()) setAnswerStreaming(false);
           });
       };
       const nextTrace = await runTraceQuery(query, sessionId, startAnswer);
@@ -289,6 +293,8 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
       if (answering) await answering;
     } catch (error) {
       if (epoch !== queryEpoch.current) return;
+      abandoned = true;
+      setAnswerStreaming(false);
       console.error("[graphRAG] Trace retrieval failed", error);
       const message = "Backend unreachable — the sample trace is shown so the canvas stays usable.";
       setTrace({ ...sampleTrace, id: `sample_failed_${epoch}_${Date.now()}`, query });

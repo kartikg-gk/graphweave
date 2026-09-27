@@ -324,6 +324,7 @@ def _paginate(
     params: dict[str, Any] | None = None,
     *,
     max_pages: int | None = None,
+    per_page: int = PER_PAGE,
 ) -> Iterator[dict]:
     """Yield raw items from ``path``, following ``Link`` ``rel="next"``.
 
@@ -337,7 +338,7 @@ def _paginate(
     needs no bound, because its limit already stops the generator.
     """
     url: str | None = path
-    request_params: dict[str, Any] | None = {**(params or {}), "per_page": PER_PAGE}
+    request_params: dict[str, Any] | None = {**(params or {}), "per_page": per_page}
     pages = 0
 
     while url is not None:
@@ -389,11 +390,17 @@ def fetch_repository(session: httpx.Client, repo: str) -> Repository:
 
 
 def fetch_pull_requests(
-    session: httpx.Client, repo: str, *, state: str = "all", limit: int | None = None
+    session: httpx.Client, repo: str, *, state: str = "all", limit: int | None = None,
+    per_page: int = PER_PAGE,
 ) -> Iterator[PullRequest]:
-    """Yield pull requests, newest first as GitHub orders them."""
+    """Yield pull requests, newest first as GitHub orders them.
+
+    ``per_page`` sizes each page. A caller that wants only a few can ask for
+    that many, so a first page of a hundred full pull request payloads is not
+    downloaded to keep fifteen.
+    """
     path = f"/repos/{repo}/pulls"
-    items = _paginate(session, path, {"state": state, **LIST_PARAMS})
+    items = _paginate(session, path, {"state": state, **LIST_PARAMS}, per_page=per_page)
     yield from islice(_validated(PullRequest, items, path), limit)
 
 
@@ -419,7 +426,8 @@ def fetch_issues(
 
 
 def fetch_commits(
-    session: httpx.Client, repo: str, *, limit: int | None = None
+    session: httpx.Client, repo: str, *, limit: int | None = None,
+    per_page: int = PER_PAGE,
 ) -> Iterator[Commit]:
     """Yield commits from the repository's default branch.
 
@@ -428,7 +436,8 @@ def fetch_commits(
     settled locally instead — see ``order.py``.
     """
     path = f"/repos/{repo}/commits"
-    yield from islice(_validated(Commit, _paginate(session, path), path), limit)
+    items = _paginate(session, path, per_page=per_page)
+    yield from islice(_validated(Commit, items, path), limit)
 
 
 def fetch_reviews(

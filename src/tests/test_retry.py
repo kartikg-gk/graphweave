@@ -522,18 +522,22 @@ def rate_limited_session(limit_from: int, recorder: list) -> httpx.Client:
 
 
 def test_a_rate_limit_at_pull_request_n_aborts_the_whole_walk():
-    """Injected at 3 of 5. The walk must not reach 4 and 5."""
+    """Injected at 3 of many. The walk raises instead of returning a partial map.
+
+    Requests run several at a time, so ones already in flight may finish; what
+    must not happen is the rest of the walk being sent once the limit is seen.
+    """
     requests: list[httpx.Request] = []
+    numbers = list(range(1, 201))
 
     with pytest.raises(GitHubRateLimitError):
         collect_by_pull_request(
-            fetch_reviews, rate_limited_session(3, requests), "o/r", [1, 2, 3, 4, 5]
+            fetch_reviews, rate_limited_session(3, requests), "o/r", numbers
         )
 
     touched = {int(r.url.path.split("/pulls/")[1].split("/")[0]) for r in requests}
-    assert touched == {1, 2, 3}
-    assert 4 not in touched
-    assert 5 not in touched
+    assert any(number >= 3 for number in touched)  # the limit was reached
+    assert len(touched) < len(numbers)  # and the rest was never sent
 
 
 def test_a_rate_limit_is_not_retried():
@@ -542,10 +546,24 @@ def test_a_rate_limit_is_not_retried():
 
     with pytest.raises(GitHubRateLimitError):
         collect_by_pull_request(
-            fetch_reviews, rate_limited_session(1, requests), "o/r", [1, 2]
+            fetch_reviews, rate_limited_session(1, requests), "o/r", [1]
         )
 
     assert len(requests) == 1
+
+
+def test_no_pull_request_is_fetched_twice():
+    """Several at a time, but each pull request is still asked for once."""
+    requests: list[httpx.Request] = []
+
+    results, failures = collect_by_pull_request(
+        fetch_reviews, rate_limited_session(10_000, requests), "o/r", list(range(1, 41))
+    )
+
+    paths = [r.url.path for r in requests]
+    assert len(paths) == len(set(paths)) == 40
+    assert list(results) == list(range(1, 41))
+    assert failures == 0
 
 
 def test_the_rate_limit_error_carries_its_reset_time():
