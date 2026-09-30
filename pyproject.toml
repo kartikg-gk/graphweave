@@ -1,12 +1,14 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "graphweave"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local GitHub repository tracing with a bundled interactive graph viewer."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 # Local GitHub ingestion dependencies. The tracing/viewer modules use only stdlib.
 dependencies = ["httpx>=0.28,<0.29", "pydantic>=2.13,<3", "python-dotenv>=1.0,<2"]
