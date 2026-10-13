@@ -150,8 +150,16 @@ async function headersFor(init: RequestInit): Promise<Headers> {
   return headers;
 }
 
-function httpError(path: string, response: Response): Error {
-  return new Error(`${path} → HTTP ${response.status} ${response.statusText}`);
+/** A failed API call, carrying the status so callers can tell "sign in" from "down". */
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function httpError(path: string, response: Response): ApiError {
+  return new ApiError(`${path} → HTTP ${response.status} ${response.statusText}`, response.status);
 }
 
 async function rawRequest(path: string, init: RequestInit = {}): Promise<Response> {

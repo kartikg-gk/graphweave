@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
-  API_BASE, createSession, fetchGraphs, fetchSessionTraces, fetchSuggestions,
+  API_BASE, ApiError, createSession, fetchGraphs, fetchSessionTraces, fetchSuggestions,
   hydrateTraceFromLog, listSessions, runTraceQuery, streamAnswer, switchGraph as switchGraphApi,
   type ApiGraph, type SessionSummary, type Suggestion, type TraceRecord,
 } from "@/lib/api";
@@ -295,6 +295,13 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
       if (epoch !== queryEpoch.current) return;
       abandoned = true;
       setAnswerStreaming(false);
+      if (error instanceof ApiError && error.status === 401) {
+        // Not an outage: questions need an account when sign-in is on.
+        const message = "Sign in to ask questions.";
+        setAnswer(message);
+        toast(message, { action: { label: "Sign in", onClick: () => navigate("/sign-in") } });
+        return;
+      }
       console.error("[graphRAG] Trace retrieval failed", error);
       const message = "Backend unreachable — the sample trace is shown so the canvas stays usable.";
       setTrace({ ...sampleTrace, id: `sample_failed_${epoch}_${Date.now()}`, query });
@@ -306,7 +313,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
         setRetrieving(false);
       }
     }
-  }, [bumpEpoch, historyEnabled, identity.email, rememberRecent]);
+  }, [bumpEpoch, historyEnabled, identity.email, navigate, rememberRecent]);
 
   const focusCitation = useCallback((nodeId: string) => {
     if (graphSwitchingRef.current) return;
