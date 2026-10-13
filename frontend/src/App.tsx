@@ -71,7 +71,7 @@ function ClerkApplication() {
           path="*"
           element={(
             <AuthUiProvider value={authUi}>
-              <StudioProvider identity={{ userId: user?.id ?? null, email: user?.primaryEmailAddress?.emailAddress ?? null, ready: isLoaded }}>
+              <StudioProvider signInRequired identity={{ userId: user?.id ?? null, email: user?.primaryEmailAddress?.emailAddress ?? null, ready: isLoaded }}>
                 <StudioRoutes />
               </StudioProvider>
             </AuthUiProvider>

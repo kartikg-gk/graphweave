@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { CornerDownLeft, LoaderCircle, Search, Sparkles } from "lucide-react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { Link, useNavigate, useOutletContext } from "react-router-dom";
 
 import { GraphWorkspace } from "@/components/graph/GraphWorkspace";
 import { summarize } from "@/lib/api";
@@ -15,7 +15,7 @@ export function HomePage() {
   const navigate = useNavigate();
   const { commandInputRef, focusRequest } = useOutletContext<ShellOutletContext>();
   const {
-    trace, retrieving, answer, answerStreaming, suggestionQueries, runQuery,
+    trace, retrieving, answer, answerStreaming, suggestionQueries, demoMode, runQuery,
     activeGraphId, citationFocus, focusCitation, graphSwitching,
   } = useStudio();
   const [query, setQuery] = useState("");
@@ -64,7 +64,8 @@ export function HomePage() {
             <span className="hidden items-center gap-1 font-mono text-[11px] text-ink-muted sm:flex"><CornerDownLeft size={13} aria-hidden="true" /> Enter</span>
           </label>
           {retrieving ? <p className="sr-only" role="status" aria-live="polite">Retrieving graph context and answer…</p> : null}
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-0.5 scrollbar-thin" aria-label="Suggested queries">
+          <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-0.5 scrollbar-thin" aria-label={demoMode ? "Demo runs" : "Suggested queries"}>
+            {demoMode ? <span className="shrink-0 text-[11px] text-ink-muted">Demo runs · <Link to="/sign-in" className="underline underline-offset-2 hover:text-ink">sign in</Link> to ask your own</span> : null}
             {suggestionQueries.map((item) => <button key={item} type="button" disabled={retrieving || graphSwitching} onClick={() => { navigate("/"); void runQuery(item); }} className="shrink-0 rounded-sm border border-line bg-paper px-2.5 py-1 text-left text-[11px] text-ink-dim transition-colors hover:border-ink-muted hover:text-ink disabled:opacity-50">{item}</button>)}
           </div>
         </div>

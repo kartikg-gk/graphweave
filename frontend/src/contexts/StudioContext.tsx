@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import {
-  API_BASE, ApiError, createSession, fetchGraphs, fetchSessionTraces, fetchSuggestions,
+  API_BASE, ApiError, createSession, loadDemoRuns, traceFromDemoRun, type DemoRun, fetchGraphs, fetchSessionTraces, fetchSuggestions,
   hydrateTraceFromLog, listSessions, runTraceQuery, streamAnswer, switchGraph as switchGraphApi,
   type ApiGraph, type SessionSummary, type Suggestion, type TraceRecord,
 } from "@/lib/api";
@@ -69,6 +69,8 @@ interface StudioContextValue {
   answerStreaming: boolean;
   suggestions: Suggestion[];
   suggestionQueries: string[];
+  /** Signed out while asking needs an account: only recorded runs open. */
+  demoMode: boolean;
   recents: string[];
   graphs: ApiGraph[];
   activeGraphId: string | null;
@@ -100,9 +102,14 @@ interface StudioContextValue {
 
 const StudioContext = createContext<StudioContextValue | null>(null);
 
-interface StudioProviderProps { children: ReactNode; identity?: HostIdentity }
+interface StudioProviderProps {
+  children: ReactNode;
+  identity?: HostIdentity;
+  /** Asking needs an account; signed-out visitors get the recorded demo runs. */
+  signInRequired?: boolean;
+}
 
-export function StudioProvider({ children, identity = { userId: null, email: null, ready: true } }: StudioProviderProps) {
+export function StudioProvider({ children, identity = { userId: null, email: null, ready: true }, signInRequired = false }: StudioProviderProps) {
   const navigate = useNavigate();
   const [trace, setTrace] = useState<TraceState>(EMPTY_TRACE);
   const [retrieving, setRetrieving] = useState(false);
@@ -133,6 +140,14 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
   const sessionGeneration = useRef(0);
   const traceGeneration = useRef(0);
   const historyEnabled = identity.ready && Boolean(identity.userId);
+  const demoMode = signInRequired && identity.ready && !identity.userId;
+  const [demoRuns, setDemoRuns] = useState<DemoRun[]>([]);
+  useEffect(() => {
+    if (!demoMode || demoRuns.length > 0) return;
+    let cancelled = false;
+    void loadDemoRuns().then((runs) => { if (!cancelled) setDemoRuns(runs); }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [demoMode, demoRuns.length]);
 
   const bumpEpoch = useCallback(() => ++queryEpoch.current, []);
 
@@ -245,6 +260,33 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
     setCitationFocus(null);
     rememberRecent(query);
 
+    if (demoMode) {
+      // Signed out: a recorded run opens; anything else asks for an account.
+      const demo = demoRuns.find((run) => run.query === query);
+      try {
+        if (!demo) {
+          const message = "Sign in to ask your own questions. Until then, try one of the demo runs.";
+          setAnswer(message);
+          toast("Sign in to ask your own questions", { action: { label: "Sign in", onClick: () => navigate("/sign-in") } });
+          return;
+        }
+        const demoTrace = await traceFromDemoRun(demo);
+        if (epoch !== queryEpoch.current) return;
+        setTrace(demoTrace);
+        setAnswer(demo.answer);
+      } catch (error) {
+        if (epoch !== queryEpoch.current) return;
+        console.error("[graphRAG] Demo run failed", error);
+        setAnswer("Backend unreachable — the demo run could not load its graph.");
+      } finally {
+        if (epoch === queryEpoch.current) {
+          retrievingRef.current = false;
+          setRetrieving(false);
+        }
+      }
+      return;
+    }
+
     let sessionId = activeSessionRef.current ?? undefined;
     if (historyEnabled && !sessionId) {
       try {
@@ -313,7 +355,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
         setRetrieving(false);
       }
     }
-  }, [bumpEpoch, historyEnabled, identity.email, navigate, rememberRecent]);
+  }, [bumpEpoch, demoMode, demoRuns, historyEnabled, identity.email, navigate, rememberRecent]);
 
   const focusCitation = useCallback((nodeId: string) => {
     if (graphSwitchingRef.current) return;
@@ -503,14 +545,16 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
     }
   }, [historyEnabled]);
 
-  const suggestionQueries = suggestions.length > 0
+  const suggestionQueries = demoMode
+    ? demoRuns.map((run) => run.query)
+    : suggestions.length > 0
     ? suggestions.slice(0, 3).map((item) => item.query)
     : [...LOCAL_PRESETS];
 
   const value = useMemo<StudioContextValue>(() => ({
     trace, retrieving, answer, answerStreaming, suggestions, suggestionQueries, recents,
     graphs, activeGraphId, graphsLoading, graphError, graphSwitching,
-    identity, historyEnabled, sessions, sessionsLoading, sessionsError,
+    identity, historyEnabled, demoMode, sessions, sessionsLoading, sessionsError,
     activeSessionId, activeTraces, tracesLoading, tracesError, citationFocus, theme,
     runQuery, focusCitation, changeGraph, newChat, loadSessionsNow, selectSession,
     selectTrace, refreshActiveTraces, toggleTheme: () => setTheme((current) => current === "dark" ? "light" : "dark"),
@@ -520,7 +564,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
     citationFocus, focusCitation, graphError, graphSwitching, graphs, graphsLoading,
     historyEnabled, identity, loadSessionsNow, newChat, recents, refreshActiveTraces,
     retrieving, runQuery, selectSession, selectTrace, sessions, sessionsError,
-    sessionsLoading, suggestionQueries, suggestions, theme, trace, tracesError, tracesLoading,
+    sessionsLoading, suggestionQueries, suggestions, demoMode, theme, trace, tracesError, tracesLoading,
   ]);
 
   return <StudioContext.Provider value={value}>{children}</StudioContext.Provider>;

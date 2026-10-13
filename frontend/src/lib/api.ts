@@ -493,6 +493,30 @@ export function adaptToTraceState(
 
 const EMPTY_SUBGRAPH: ApiSubgraph = { nodes: [], edges: [] };
 
+/** A recorded run shown to visitors who are not signed in. */
+export interface DemoRun {
+  query: string;
+  response: ApiTraceResponse;
+  answer: string;
+}
+
+/** The recorded runs, loaded on first use so they stay out of the main bundle. */
+export async function loadDemoRuns(): Promise<DemoRun[]> {
+  const module = await import("./demoRuns.json");
+  return (module.default as unknown as DemoRun[]).map((run) => ({
+    ...run,
+    response: { ...run.response, context: run.response.context ?? "" },
+  }));
+}
+
+/** A recorded run as a trace: the graph around its results is fetched live. */
+export async function traceFromDemoRun(run: DemoRun): Promise<TraceState> {
+  const started = performance.now();
+  const ids = allTraceNodeIds(run.response);
+  const subgraph = ids.length === 0 ? EMPTY_SUBGRAPH : await fetchSubgraph(ids);
+  return adaptToTraceState(run.query, run.response, subgraph, performance.now() - started);
+}
+
 // onContext runs as soon as the trace returns, before the subgraph request, so
 // the answer can start streaming while the graph is still being fetched.
 export async function runTraceQuery(
