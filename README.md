@@ -23,6 +23,14 @@ graphweave graphweave_out/trace_state.json
 
 The first command installs it. The second reads the repository's recent pull requests, issues and commits and saves what matches your question. The third opens the result in your browser at `http://127.0.0.1:4630`.
 
+## From your AI assistant
+
+```bash
+graphweave install
+```
+
+This adds a graphweave skill to Claude Code and Codex. Then ask your assistant about any public repository, like *"who worked on proxies in psf/requests?"*, and it answers with links to the pull requests, issues and people behind it. Every run also writes a `.report.md` beside the trace; `graphweave report <trace.json>` makes one for any trace.
+
 ## In your browser
 
 The map shows the pull requests, issues, commits and people behind the answer and how they connect. Below it, **Retrieved vs used** marks which items the answer actually draws on, then the steps taken and the answer itself. Open a folder instead of a file to switch between saved questions.

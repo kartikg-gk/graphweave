@@ -49,8 +49,9 @@ packages = [
     "graphrag", "graphrag.adapters", "graphrag.analysis", "graphrag.api",
     "graphrag.common", "graphrag.graphdb", "graphrag.models", "graphrag.ingestion",
     "graphrag.knowledge", "graphrag.repository", "graphrag.retrieval",
-    "graphrag.tracing", "graphrag.worker",
+    "graphrag.skill", "graphrag.tracing", "graphrag.worker",
 ]
 
 [tool.setuptools.package-data]
 "graphrag.tracing" = ["ui/viewer.html", "ui/assets/*"]
+"graphrag.skill" = ["SKILL.md"]
