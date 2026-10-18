@@ -59,6 +59,60 @@ def _import_otel(args: list[str]) -> int:
     return 0
 
 
+def _verify(args: list[str]) -> int:
+    """``graphweave verify <trace.json>``: leave-one-out check of the used/unused verdict."""
+    import argparse
+    import json
+    import os
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(
+        prog="graphweave verify",
+        description="Re-ask the question with each retrieved item removed, and compare what the "
+                    "answer needed with the word-overlap verdict. Makes (items + 2) model calls.")
+    parser.add_argument("trace", type=Path)
+    parser.add_argument("--model", default=os.environ.get("GRAPHWEAVE_VERIFY_MODEL", "google/gemini-2.5-flash-lite"))
+    parser.add_argument("--base-url", default=os.environ.get("GRAPHWEAVE_VERIFY_BASE_URL"))
+    options = parser.parse_args(args)
+
+    key = (os.environ.get("GRAPHWEAVE_VERIFY_KEY") or os.environ.get("OPENROUTER_API_KEY")
+           or os.environ.get("OPENAI_API_KEY"))
+    if not key:
+        print("graphweave verify needs a model key: set OPENROUTER_API_KEY, OPENAI_API_KEY "
+              "or GRAPHWEAVE_VERIFY_KEY.", file=sys.stderr)
+        return 2
+    base_url = options.base_url
+    if base_url is None and key != os.environ.get("OPENAI_API_KEY"):
+        # A graphweave or OpenRouter key: OpenRouter, unless --base-url says otherwise.
+        base_url = "https://openrouter.ai/api/v1"
+    try:
+        from .verify import openai_ask, render, verify
+    except ImportError:
+        print('graphweave verify needs the openai package: pip install "graphweave[verify]"', file=sys.stderr)
+        return 1
+    from .tracing.store import load
+
+    try:
+        trace = load(options.trace)
+    except FileNotFoundError:
+        print(f"no such trace file: {options.trace}", file=sys.stderr)
+        return 1
+    if not trace.items:
+        print("That trace has no retrieved items to check.", file=sys.stderr)
+        return 1
+    try:
+        result = verify(trace, openai_ask(options.model, api_key=key, base_url=base_url))
+    except Exception as exc:  # noqa: BLE001 - model or network failure, reported plainly
+        print(f"graphweave verify: the model call failed: {exc}", file=sys.stderr)
+        return 1
+    destination = options.trace.with_name(f"{options.trace.stem}.verify.json")
+    destination.write_text(json.dumps(result.as_dict(), indent=2), encoding="utf-8")
+    print(render(result))
+    print()
+    print(f"Wrote {destination}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
     if args and args[0] == "install":
@@ -69,6 +123,8 @@ def main(argv: list[str] | None = None) -> int:
         return _report(args[1:])
     if args and args[0] == "import-otel":
         return _import_otel(args[1:])
+    if args and args[0] == "verify":
+        return _verify(args[1:])
     if args and args[0] == "github-trace":
         from .local_github import main as github_main
 

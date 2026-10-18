@@ -21,6 +21,7 @@ backend = [
 adapter = ["langchain-core>=1.5,<2"]
 mcp = ["mcp>=1.2,<3"]
 llamaindex = ["llama-index-core>=0.12,<0.15"]
+verify = ["openai>=3.3,<4"]
 examples = ["langgraph>=1.2,<2"]
 extraction = ["spacy>=3.7,<4"]
 embeddings = ["sentence-transformers>=5,<6"]
