@@ -21,6 +21,7 @@ from .ingestion import (
 )
 from .ingestion.github import PER_PAGE
 from .knowledge import GraphBuilder
+from .tracing.report import write_report
 from .knowledge.documents import source_documents
 from .tracing import (
     Retrieval, Span, Trace, TraceEdge, TraceItem, overlap_score, save,
@@ -244,11 +245,13 @@ def main(argv: list[str] | None = None) -> int:
                             started_at=started_at, ingestion_ms=ingestion_ms, top=args.top,
                             source_metrics=source_metrics)
         destination = save(trace, args.out)
+        report = write_report(trace, destination)
     except (GitHubError, OSError, ValueError) as exc:
         print(f"graphweave-github-trace: {exc}", file=sys.stderr)
         return 1
     print(trace.answer)
     print(f"Wrote {destination} (v4; {len(trace.items)} nodes, {len(trace.edges)} edges)")
+    print(f"Report for your agent: {report}")
     print(f"View with: graphweave {destination}")
     return 0
 
