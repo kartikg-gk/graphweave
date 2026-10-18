@@ -31,6 +31,10 @@ graphweave install
 
 This adds a graphweave skill to Claude Code and Codex. Then ask your assistant about any public repository, like *"who worked on proxies in psf/requests?"*, and it answers with links to the pull requests, issues and people behind it. Every run also writes a `.report.md` beside the trace; `graphweave report <trace.json>` makes one for any trace.
 
+Prefer tools over a skill? `pip install "graphweave[mcp]"` adds a local MCP server: register `graphweave-mcp` with your assistant (for Claude Code: `claude mcp add graphweave -- graphweave-mcp`).
+
+Repeat questions are faster: GitHub responses are kept in `graphweave_out/cache` and re-checked on every run, so results are never stale. Add `--no-cache` to skip it.
+
 ## In your browser
 
 The map shows the pull requests, issues, commits and people behind the answer and how they connect. Below it, **Retrieved vs used** marks which items the answer actually draws on, then the steps taken and the answer itself. Open a folder instead of a file to switch between saved questions.

@@ -76,4 +76,5 @@ def main(argv: list[str] | None = None) -> int:
     for path in written:
         print(f"Installed {path}")
     print('Ask your assistant something like: "who worked on retries in psf/requests?"')
+    print('Optional MCP tools: pip install "graphweave[mcp]", then e.g. claude mcp add graphweave -- graphweave-mcp')
     return 0
