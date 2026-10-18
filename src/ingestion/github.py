@@ -34,6 +34,8 @@ from datetime import datetime, timezone
 from itertools import islice
 from typing import Any, Iterable, Iterator
 
+from pathlib import Path
+
 import httpx
 from pydantic import BaseModel, ValidationError
 
@@ -147,11 +149,14 @@ class GitHubRateLimitError(GitHubError):
 # --------------------------------------------------------------------------
 
 
-def make_session(token: str | None = None) -> httpx.Client:
+def make_session(token: str | None = None, *, cache_dir: str | Path | None = None) -> httpx.Client:
     """Build a session for the GitHub REST API.
 
     Falls back to ``$GITHUB_TOKEN``. Without a token GitHub allows 60 requests
     per hour, which is enough for a smoke test and not enough for an ingest.
+
+    With ``cache_dir``, GET responses are kept on disk and revalidated by ETag
+    (see ``http_cache``), so an unchanged page is served without its body.
     """
     token = token or os.environ.get("GITHUB_TOKEN")
     headers = {
@@ -160,6 +165,11 @@ def make_session(token: str | None = None) -> httpx.Client:
     }
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    if cache_dir is not None:
+        from .http_cache import CachingTransport
+
+        return httpx.Client(base_url=API_ROOT, headers=headers, timeout=TIMEOUT,
+                            transport=CachingTransport(cache_dir))
     return httpx.Client(base_url=API_ROOT, headers=headers, timeout=TIMEOUT)
 
 

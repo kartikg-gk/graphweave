@@ -29,6 +29,8 @@ from .tracing import (
 from .tracing._text import STOP, tokens
 
 DEFAULT_OUTPUT = Path("graphweave_out/trace_state.json")
+#: GitHub responses kept between runs, revalidated by ETag on every use.
+DEFAULT_CACHE = Path("graphweave_out/cache")
 ITEM_EXCERPT_CHARS = 500
 REPO_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
@@ -196,6 +198,32 @@ def build_trace(repo: str, question: str, graph: GraphBuilder, documents,
     return trace
 
 
+def run_trace(repository: str, question: str, *, prs: int = 15, issues: int = 15,
+              commits: int = 20, files: bool = False, reviews: bool = False, top: int = 10,
+              source: bool = False, max_source_files: int = 20,
+              out: Path = DEFAULT_OUTPUT, cache_dir: Path | None = DEFAULT_CACHE):
+    """Fetch, rank, save the trace and its report. Returns (trace, trace path, report path)."""
+    started_at = datetime.now(timezone.utc)
+    began = time.perf_counter()
+    source_metrics = None
+    with make_session(cache_dir=cache_dir) as session:
+        graph, documents, stats = fetch_graph(
+            repository, prs=prs, issues=issues, commits=commits,
+            files=files, reviews=reviews, session=session,
+        )
+        if source:
+            from .ingestion.source import index_source
+
+            source_metrics = index_source(session, repository, question,
+                                          graph, documents, max_files=max_source_files)
+    ingestion_ms = (time.perf_counter() - began) * 1000
+    trace = build_trace(repository, question, graph, documents, stats,
+                        started_at=started_at, ingestion_ms=ingestion_ms, top=top,
+                        source_metrics=source_metrics)
+    destination = save(trace, out)
+    return trace, destination, write_report(trace, destination)
+
+
 def main(argv: list[str] | None = None) -> int:
     # GitHub titles may contain characters the Windows console code page
     # cannot print. The UTF-8 trace itself always retains the original text.
@@ -216,6 +244,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-source-files", type=int, default=20,
                         help="maximum source files to fetch with --source (default: 20)")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--cache-dir", type=Path, default=DEFAULT_CACHE,
+                        help=f"where GitHub responses are kept between runs (default: {DEFAULT_CACHE})")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="fetch everything again and keep nothing")
     args = parser.parse_args(argv)
     if not REPO_PATTERN.fullmatch(args.repository) or any(part in {".", ".."} for part in args.repository.split("/")):
         parser.error("repository must be owner/repo")
@@ -225,27 +257,13 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("question must contain text")
     if not 1 <= args.max_source_files <= 200:
         parser.error("--max-source-files must be between 1 and 200")
-    started_at = datetime.now(timezone.utc)
-    began = time.perf_counter()
     try:
-        source_metrics = None
-        with make_session() as session:
-            graph, documents, stats = fetch_graph(
-                args.repository, prs=args.prs, issues=args.issues,
-                commits=args.commits, files=args.files, reviews=args.reviews,
-                session=session,
-            )
-            if args.source:
-                from .ingestion.source import index_source
-
-                source_metrics = index_source(session, args.repository, args.question,
-                                              graph, documents, max_files=args.max_source_files)
-        ingestion_ms = (time.perf_counter() - began) * 1000
-        trace = build_trace(args.repository, args.question, graph, documents, stats,
-                            started_at=started_at, ingestion_ms=ingestion_ms, top=args.top,
-                            source_metrics=source_metrics)
-        destination = save(trace, args.out)
-        report = write_report(trace, destination)
+        trace, destination, report = run_trace(
+            args.repository, args.question, prs=args.prs, issues=args.issues,
+            commits=args.commits, files=args.files, reviews=args.reviews, top=args.top,
+            source=args.source, max_source_files=args.max_source_files, out=args.out,
+            cache_dir=None if args.no_cache else args.cache_dir,
+        )
     except (GitHubError, OSError, ValueError) as exc:
         print(f"graphweave-github-trace: {exc}", file=sys.stderr)
         return 1
