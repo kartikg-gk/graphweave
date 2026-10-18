@@ -64,10 +64,20 @@ function toFlowNodes(graph: Graph): FlowNode[] {
   }));
 }
 
+// Links read out of prose rather than from a platform's own records. They are
+// marked on the canvas so a guessed link never reads like a recorded one.
+const TEXT_RELATIONS = new Set(["MENTIONS", "CO_OCCURS"]);
+
+function edgeLabel(relation?: string): string | undefined {
+  if (!relation) return undefined;
+  const label = relation.toLowerCase().replace(/_/g, " ");
+  return TEXT_RELATIONS.has(relation.toUpperCase()) ? `${label} · from text` : label;
+}
+
 function toFlowEdges(graph: Graph): Edge[] {
   return graph.edges.map((edge) => ({
     id: edge.id, source: edge.source, target: edge.target, type: "step",
-    label: edge.relation?.toLowerCase().replace(/_/g, " "),
+    label: edgeLabel(edge.relation),
     labelStyle: { fill: "rgb(var(--m-ink-dim))", fontFamily: "ui-monospace, monospace", fontSize: 11 },
     labelBgStyle: { fill: "rgb(var(--m-paper))", fillOpacity: 0.9 },
     labelBgPadding: [5, 3] as [number, number],
