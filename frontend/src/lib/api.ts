@@ -510,57 +510,11 @@ export async function loadDemoRuns(): Promise<DemoRun[]> {
 }
 
 /** A recorded run as a trace: the graph around its results is fetched live. */
-// Demo runs show placeholder names for people. The recorded runs are already
-// renamed; the live subgraph is renamed here, by the same table, with any other
-// person on the map getting the next unused placeholder.
-const DEMO_PEOPLE: Record<string, string> = {
-  kevinjosethomas: "alice", sethkarten: "bob", snimu: "carol", kristianernst: "dave",
-  andrewneilson: "erin", robertkeus: "frank", keejkrej: "grace",
-};
-const SPARE_NAMES = ["heidi", "ivan", "judy", "mallory", "niaj", "olivia", "peggy", "rupert", "sybil", "trent", "victor", "walter"];
-
-function escapeName(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-export function aliasDemoPeople(trace: TraceState): TraceState {
-  const names: Record<string, string> = { ...DEMO_PEOPLE };
-  const used = new Set(Object.values(names));
-  const spare = SPARE_NAMES.filter((name) => !used.has(name));
-  for (const node of trace.graph.nodes) {
-    if (node.type === "Person" && !(node.label in names) && !used.has(node.label)) {
-      names[node.label] = spare.shift() ?? `person-${Object.keys(names).length + 1}`;
-    }
-  }
-  const pattern = new RegExp(`(?<![A-Za-z0-9-])(${Object.keys(names).map(escapeName).join("|")})(?![A-Za-z0-9-])`, "g");
-  const rename = (text: string) => text.replace(pattern, (match) => names[match] ?? match);
-  return {
-    ...trace,
-    query: rename(trace.query),
-    context: trace.context === undefined ? undefined : rename(trace.context),
-    steps: trace.steps.map((step) => ({ ...step, title: rename(step.title), detail: rename(step.detail) })),
-    graph: {
-      ...trace.graph,
-      nodes: trace.graph.nodes.map((node) => ({
-        ...node,
-        label: rename(node.label),
-        meta: node.meta && {
-          ...node.meta,
-          ...(node.meta.subtitle !== undefined ? { subtitle: rename(node.meta.subtitle) } : {}),
-          ...(node.meta.owner !== undefined ? { owner: rename(node.meta.owner) } : {}),
-          ...(node.meta.snippet !== undefined ? { snippet: rename(node.meta.snippet) } : {}),
-          ...(node.meta.summaryText !== undefined ? { summaryText: rename(node.meta.summaryText) } : {}),
-        },
-      })),
-    },
-  };
-}
-
 export async function traceFromDemoRun(run: DemoRun): Promise<TraceState> {
   const started = performance.now();
   const ids = allTraceNodeIds(run.response);
   const subgraph = ids.length === 0 ? EMPTY_SUBGRAPH : await fetchSubgraph(ids);
-  return aliasDemoPeople(adaptToTraceState(run.query, run.response, subgraph, performance.now() - started));
+  return adaptToTraceState(run.query, run.response, subgraph, performance.now() - started);
 }
 
 // onContext runs as soon as the trace returns, before the subgraph request, so
