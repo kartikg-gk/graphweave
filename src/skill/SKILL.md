@@ -73,7 +73,7 @@ trace = capture(question, retrieved_items, answer=answer, producer="my-agent")
 save(trace, "graphweave_out/my-run.json")
 ```
 
-`retrieved_items` is a list of dicts with `id`, `label` and `content`. For LangGraph, `pip install "graphweave[adapter]"` and pass `graphrag.tracing_langgraph.LangGraphTracer()` as a callback. For LlamaIndex, `pip install "graphweave[llamaindex]"`, wrap the query in `with graphrag.tracing_llamaindex.LlamaIndexTracer() as t:` and call `t.finish(question, answer)`. If they already export OpenTelemetry spans (OpenInference), run `graphweave import-otel spans.json`. Then use step 4 on the saved file.
+`retrieved_items` is a list of dicts with `id`, `label` and `content`. For LangGraph, `pip install "graphweave[adapter]"` and pass `graphrag.tracing_langgraph.LangGraphTracer()` as a callback. For LlamaIndex, `pip install "graphweave[llamaindex]"`, wrap the query in `with graphrag.tracing_llamaindex.LlamaIndexTracer() as t:` and call `t.finish(question, answer)`. For DSPy, `pip install "graphweave[dspy]"`, run the program inside `with graphrag.tracing_dspy.DSPyTracer() as t:` and call `t.finish()`. If they already export OpenTelemetry spans (OpenInference), run `graphweave import-otel spans.json`. Then use step 4 on the saved file.
 
 If the user doubts a used/unused mark, offer `graphweave verify <trace.json>`: it re-asks a model with each item removed (needs `graphweave[verify]` and an API key; one model call per item, so say so before running it).
 
