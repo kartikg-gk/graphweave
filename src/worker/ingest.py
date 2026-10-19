@@ -261,9 +261,9 @@ def default_embed(text: str) -> list[float]:
     """Embed one string, through a model built once for this process."""
     global _embedder
     if _embedder is None:
-        from ..analysis.similarity import SentenceTransformerEmbedder
+        from ..analysis.similarity import MiniLMEmbedder
 
-        _embedder = SentenceTransformerEmbedder()
+        _embedder = MiniLMEmbedder()
     return _embedder.embed(text)
 
 

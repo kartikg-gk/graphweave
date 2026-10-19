@@ -1,7 +1,7 @@
 """How alike two surface forms are.
 
 One embedder, one scoring path, no abstraction over either. Text becomes a
-dense vector from a sentence-transformer; vectors are L2-normalised; a score is
+dense vector from all-MiniLM-L6-v2 run through ONNX Runtime; vectors are L2-normalised; a score is
 a dot product against the candidate matrix. That is the whole module.
 
 There is deliberately no embedder interface and no way to select one by name.
@@ -41,8 +41,17 @@ The model is loaded once per process and reused. Loading costs roughly a second
 and a suite constructs many ``Similarity`` objects, so a per-instance load would
 dominate the run.
 
-**This module requires torch, which on this machine runs only under WSL.** See
-the README for the supported way to run the suite.
+The model runs through ONNX Runtime (``fastembed``), not torch. Measured on
+593 texts from the demo graph against the sentence-transformers build of the
+same model: the largest difference in any vector element was 2.3e-7, no
+pairwise score moved by more than 6e-7, and every top-10 neighbour set and
+every decision at thresholds 0.5 to 0.92 was identical. So the identity string
+is unchanged and stores written by the torch build still load.
+
+What it changed: install 225 MB instead of 1.4 GB, model load about 1 s
+instead of 13 s, peak memory 347 MB instead of 794 MB while embedding the
+same texts at the same speed. That needs ``BATCH_SIZE`` small: at fastembed's
+default of 256 the peak was 2.5 GB, more than the demo server has.
 
 The test seam
 -------------
@@ -61,6 +70,9 @@ from typing import Sequence
 #: model rather than configured — there is no dimension to choose and nothing
 #: to tune.
 MODEL_NAME = "all-MiniLM-L6-v2"
+#: Texts per ONNX call. Larger batches pad every text to the longest one and
+#: memory grows with it (2.5 GB at 256); 8 was as fast as any size measured.
+BATCH_SIZE = 8
 
 _model = None
 
@@ -74,13 +86,13 @@ def _load_model():
     """
     global _model
     if _model is None:
-        from sentence_transformers import SentenceTransformer
+        from fastembed import TextEmbedding
 
-        _model = SentenceTransformer(MODEL_NAME)
+        _model = TextEmbedding(f"sentence-transformers/{MODEL_NAME}")
     return _model
 
 
-class SentenceTransformerEmbedder:
+class MiniLMEmbedder:
     """Text to a dense vector, via all-MiniLM-L6-v2.
 
     Everything here is one call into someone else's library. There is no
@@ -92,29 +104,26 @@ class SentenceTransformerEmbedder:
     rather than silently compared.
     """
 
-    @property
-    def dimension(self) -> int:
-        model = _load_model()
-        # Renamed in sentence-transformers 5; the old name still works but
-        # warns, and the new one does not exist on older releases.
-        getter = getattr(model, "get_embedding_dimension", None) or getattr(
-            model, "get_sentence_embedding_dimension"
-        )
-        return int(getter())
+    #: The model's output size. Fixed by the model, not configured.
+    dimension = 384
 
     @property
     def identity(self) -> str:
         return f"{MODEL_NAME}-{self.dimension}"
 
     def embed(self, text: str) -> list[float]:
-        return [float(value) for value in _load_model().encode(text)]
+        return self.embed_many([text])[0]
 
     def embed_many(self, texts: Sequence[str]) -> list[list[float]]:
-        """One batch through the model, which is much faster than one at a time."""
+        """Batches through the model, which is much faster than one at a time."""
         if not texts:
             return []
-        encoded = _load_model().encode(list(texts))
-        return [[float(value) for value in row] for row in encoded]
+        rows = _load_model().embed(list(texts), batch_size=BATCH_SIZE)
+        return [[float(value) for value in row] for row in rows]
+
+
+#: The earlier name, kept so existing imports still work.
+SentenceTransformerEmbedder = MiniLMEmbedder
 
 
 def _normalised(vector: Sequence[float]) -> list[float]:
@@ -144,7 +153,7 @@ class Similarity:
     def __init__(self, embedder=None) -> None:
         # The test seam, and the only one. Production passes nothing.
         self.embedder = (
-            embedder if embedder is not None else SentenceTransformerEmbedder()
+            embedder if embedder is not None else MiniLMEmbedder()
         )
         self._cache: dict[str, list[float]] = {}
 

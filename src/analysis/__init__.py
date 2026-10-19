@@ -19,7 +19,7 @@ from .resolve import (
     ResolvedEntity,
     Resolver,
 )
-from .similarity import MODEL_NAME, SentenceTransformerEmbedder, Similarity
+from .similarity import MODEL_NAME, MiniLMEmbedder, SentenceTransformerEmbedder, Similarity
 from .extract import (
     DEFAULT_BACKEND,
     LABEL_MAP,
@@ -44,6 +44,7 @@ __all__ = [
     "Extractor",
     "Judge",
     "LABEL_MAP",
+    "MiniLMEmbedder",
     "SentenceTransformerEmbedder",
     "NullBackend",
     "RULES",

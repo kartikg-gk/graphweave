@@ -12,7 +12,7 @@ rather than for configuration — production constructs ``Similarity()`` and get
 below, because it is the property that lets a stub return hand-built numbers of
 any magnitude and still drive the real thresholds.
 
-The model-backed tests need torch, which on this machine runs only under WSL.
+The model-backed tests need fastembed and download the model on first run.
 See the README — there is no lighter path any more.
 """
 

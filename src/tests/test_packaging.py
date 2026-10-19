@@ -240,7 +240,7 @@ def test_the_tests_are_not_shipped(clean_install):
 
 @pytest.mark.parametrize(
     "package",
-    ["langgraph", "langchain-core", "pytest", "spacy", "sentence-transformers",
+    ["langgraph", "langchain-core", "pytest", "spacy", "fastembed",
      "ladybug"],
 )
 def test_test_and_example_only_dependencies_are_optional(package):

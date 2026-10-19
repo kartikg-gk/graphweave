@@ -14,13 +14,11 @@ USER app
 ENV HOME=/home/app \
     PATH=/home/app/.local/bin:$PATH \
     PYTHONUNBUFFERED=1 \
-    HF_HOME=/home/app/.cache/huggingface
+    HF_HOME=/home/app/.cache/huggingface \
+    FASTEMBED_CACHE_PATH=/home/app/.cache/fastembed
 WORKDIR /home/app/service
 
-# The CPU build of torch first: left to itself, sentence-transformers pulls the
-# CUDA build, about a gigabyte of GPU libraries a CPU container never uses.
-RUN pip install --no-cache-dir --user --upgrade pip && \
-    pip install --no-cache-dir --user torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --user --upgrade pip
 
 # Dependencies before code, so this layer survives code changes.
 COPY --chown=app pyproject.toml README.md ./
@@ -30,7 +28,7 @@ RUN pip install --no-cache-dir --user ".[backend,api,graph,embeddings,judge,sent
 
 # Fetch the embedding model at build time, so the first request does not wait
 # on a download.
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')"
 
 # The graph engine's vector extension, for the same reason: a graph file with a
 # vector index loads it while opening, so a container that has to fetch it at

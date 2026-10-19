@@ -405,6 +405,7 @@ def test_the_registry_imports_with_the_store_and_the_models_blocked():
             "sys.modules['ladybug'] = None;"
             "sys.modules['sentence_transformers'] = None;"
             "sys.modules['torch'] = None;"
+            "sys.modules['fastembed'] = None;"
             "from src.registry import GraphRegistry;"
             "r = GraphRegistry();"
             "r.attach('k', object(), path='p');"
