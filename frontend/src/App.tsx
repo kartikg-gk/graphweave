@@ -1,8 +1,9 @@
-import { ClerkProvider, SignIn, SignUp, UserButton, useAuth, useUser } from "@clerk/clerk-react";
+import { AuthenticateWithRedirectCallback, ClerkProvider, useAuth, useUser } from "@clerk/clerk-react";
 import { useLayoutEffect } from "react";
 import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import { Toaster } from "sonner";
 
+import { AccountControl, AuthForm } from "@/components/auth/AuthForm";
 import { AppShell } from "@/components/shell/AppShell";
 import { AuthUiProvider, type AuthUiState } from "@/contexts/AuthUiContext";
 import { StudioProvider } from "@/contexts/StudioContext";
@@ -32,11 +33,7 @@ function StudioRoutes() {
 function AuthPage({ mode }: { mode: "sign-in" | "sign-up" }) {
   return (
     <main className="flex min-h-dvh items-center justify-center overflow-y-auto bg-paper p-4 text-ink">
-      {mode === "sign-in" ? (
-        <SignIn routing="path" path="/sign-in" signUpUrl="/sign-up" fallbackRedirectUrl="/" />
-      ) : (
-        <SignUp routing="path" path="/sign-up" signInUrl="/sign-in" fallbackRedirectUrl="/" />
-      )}
+      <AuthForm mode={mode} />
     </main>
   );
 }
@@ -56,7 +53,7 @@ function ClerkApplication() {
     control: !isLoaded ? (
       <span className="whitespace-nowrap text-xs text-ink-muted" role="status" aria-live="polite">Account…</span>
     ) : user ? (
-      <UserButton afterSignOutUrl="/" />
+      <AccountControl email={user.primaryEmailAddress?.emailAddress ?? null} />
     ) : (
       <Link className="page-action whitespace-nowrap" to="/sign-in">Sign in</Link>
     ),
@@ -67,6 +64,10 @@ function ClerkApplication() {
       <Routes>
         <Route path="/sign-in/*" element={<AuthPage mode="sign-in" />} />
         <Route path="/sign-up/*" element={<AuthPage mode="sign-up" />} />
+        <Route
+          path="/sso-callback"
+          element={<AuthenticateWithRedirectCallback signInUrl="/sign-in" signUpUrl="/sign-up" signInFallbackRedirectUrl="/" signUpFallbackRedirectUrl="/" />}
+        />
         <Route
           path="*"
           element={(
