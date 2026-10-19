@@ -714,6 +714,7 @@ def test_a_missing_repository_reports_the_status_and_the_name():
     message = str(excinfo.value)
     assert "404" in message
     assert "o/does-not-exist" in message
+    assert "was not found" in message
 
 
 def test_bad_credentials_report_401():

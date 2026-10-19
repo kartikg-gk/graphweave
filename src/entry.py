@@ -113,8 +113,25 @@ def _verify(args: list[str]) -> int:
     return 0
 
 
+USAGE = """usage: graphweave <trace.json | folder>     open traces in the local viewer
+       graphweave <command> ...
+
+commands:
+  github-trace owner/name "question"  trace a question over a GitHub repository
+  report <trace.json>                 write a Markdown report beside a trace
+  verify <trace.json>                 check used/unused marks by leaving each item out
+  import-otel <spans.json>            turn OpenTelemetry / OpenInference spans into traces
+  install                             add the graphweave skill to Claude Code and Codex
+
+Run graphweave <command> --help for that command's options.
+"""
+
+
 def main(argv: list[str] | None = None) -> int:
     args = sys.argv[1:] if argv is None else argv
+    if not args or args[0] in {"-h", "--help", "help"}:
+        print(USAGE, end="")
+        return 0 if args else 2
     if args and args[0] == "install":
         from .skill.install import main as install_main
 

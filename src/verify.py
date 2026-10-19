@@ -1,6 +1,6 @@
 """Leave-one-out: check the used/unused verdict against what the answer needed.
 
-The viewer calls an item *used* when enough of its words reach the answer. That
+The viewer calls an item *used* when it shares enough words with the answer. That
 is a cheap guess, and it can be wrong both ways: a paraphrased item looks
 unused, and an item that shares words by chance looks used. This measures
 instead. The question is answered from all the retrieved items, then once more

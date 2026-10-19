@@ -1,0 +1,30 @@
+# Checks the live site and API every 30 minutes. A failed run makes GitHub
+# email the repository owner, which is the whole alert.
+name: uptime
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: API health
+        run: |
+          body=$(curl -fsS --retry 3 --retry-delay 10 --max-time 20 https://api.graphweave.online/api/health)
+          echo "$body"
+          echo "$body" | grep -q '"status":"ok"'
+      - name: Graph list
+        run: curl -fsS --retry 3 --retry-delay 10 --max-time 20 -o /dev/null https://api.graphweave.online/api/graphs
+      - name: Studio
+        run: curl -fsS --retry 3 --retry-delay 10 --max-time 20 https://www.graphweave.online | grep -q "<title>graphweave"
+      - name: Sign-in still required for questions
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 -X POST https://api.graphweave.online/api/trace \
+            -H 'content-type: application/json' -d '{"query":"uptime"}')
+          echo "$code"; test "$code" = 401

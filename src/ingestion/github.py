@@ -270,6 +270,13 @@ def _failure(url: str, response: httpx.Response) -> GitHubError:
             retry_after=_retry_after(response),
         )
 
+    if status == 404 and url.count("/") == 3 and url.startswith("/repos/"):
+        return GitHubError(
+            f"Repository {url[len('/repos/'):]} was not found (HTTP 404). Check the owner/name spelling; "
+            "a private repository needs GITHUB_TOKEN with access to it.",
+            status_code=status,
+        )
+
     return GitHubError(
         f"GitHub request to {url} failed with HTTP {status}. {detail}".strip(),
         status_code=status,

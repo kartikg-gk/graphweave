@@ -92,8 +92,8 @@ def render_markdown(trace: Trace, *, threshold: float = DEFAULT_THRESHOLD) -> st
         lines += ["## Answer", "", trace.answer.strip(), ""]
     if trace.answer:
         lines += [
-            f"**Retrieved {len(items)}, used {len(used)}.** An item counts as used when at "
-            f"least {threshold:.0%} of its words appear in the answer.",
+            f"**Retrieved {len(items)}, used {len(used)}.** An item counts as used when the words it "
+            f"shares with the answer are at least {threshold:.0%} of the smaller of the two.",
             "",
         ]
     else:

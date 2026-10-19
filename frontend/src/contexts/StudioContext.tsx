@@ -219,7 +219,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
             active = confirmed.active;
           } catch (error) {
             if (generation !== graphGeneration.current) return;
-            console.error("[graphRAG] Saved graph restore failed", error);
+            console.error("[graphweave] Saved graph restore failed", error);
             setGraphError(error instanceof Error ? error.message : "Unable to restore saved graph");
             setGraphs(response.graphs.map((graph) => ({ ...graph, active: graph.id === response.active })));
             setActiveGraphId(response.active);
@@ -276,7 +276,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
         setAnswer(demo.answer);
       } catch (error) {
         if (epoch !== queryEpoch.current) return;
-        console.error("[graphRAG] Demo run failed", error);
+        console.error("[graphweave] Demo run failed", error);
         setAnswer("Backend unreachable — the demo run could not load its graph.");
       } finally {
         if (epoch === queryEpoch.current) {
@@ -297,7 +297,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
         setActiveSessionId(created.id);
         setSessions((current) => [created, ...current.filter((item) => item.id !== created.id)]);
       } catch (error) {
-        if (epoch === queryEpoch.current) console.error("[graphRAG] Session creation failed", error);
+        if (epoch === queryEpoch.current) console.error("[graphweave] Session creation failed", error);
       }
       if (epoch !== queryEpoch.current) return;
     }
@@ -320,7 +320,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
           .then(() => undefined)
           .catch((error) => {
             if (!current()) return;
-            console.error("[graphRAG] Answer stream failed", error);
+            console.error("[graphweave] Answer stream failed", error);
             setAnswer(null);
           })
           .finally(() => {
@@ -344,7 +344,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
         toast(message, { action: { label: "Sign in", onClick: () => navigate("/sign-in") } });
         return;
       }
-      console.error("[graphRAG] Trace retrieval failed", error);
+      console.error("[graphweave] Trace retrieval failed", error);
       const message = "Backend unreachable — the sample trace is shown so the canvas stays usable.";
       setTrace({ ...sampleTrace, id: `sample_failed_${epoch}_${Date.now()}`, query });
       setAnswer(message);
@@ -461,7 +461,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
       navigate("/");
     } catch (error) {
       if (epoch !== queryEpoch.current) return;
-      console.error("[graphRAG] History hydration failed", error);
+      console.error("[graphweave] History hydration failed", error);
       setTrace(EMPTY_TRACE);
       toast.error(error instanceof Error ? error.message : "This trace cannot be restored.");
     } finally {

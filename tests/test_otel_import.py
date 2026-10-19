@@ -79,5 +79,18 @@ class ShapeTests(unittest.TestCase):
             self.assertEqual(entry_main(["import-otel", str(empty), "--out", folder]), 1)
 
 
+
+class HelpTests(unittest.TestCase):
+    def test_help_lists_every_command(self):
+        import contextlib
+        import io
+
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(entry_main(["--help"]), 0)
+        for command in ("github-trace", "report", "verify", "import-otel", "install"):
+            self.assertIn(command, out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
