@@ -51,3 +51,4 @@ graphrag_out/
 graphweave_out/
 .uv-cache/
 /frontend/.test-build/
+!src/skill/SKILL.md
