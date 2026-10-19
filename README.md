@@ -42,6 +42,7 @@ Repeat questions are faster: GitHub responses are kept in `graphweave_out/cache`
 | Anything | `capture(question, items, answer=answer)` then `save(trace, "run.json")` from `graphrag.tracing` |
 | LangGraph | `pip install "graphweave[adapter]"`, pass `graphrag.tracing_langgraph.LangGraphTracer()` as a callback |
 | LlamaIndex | `pip install "graphweave[llamaindex]"`, wrap queries in `with LlamaIndexTracer() as t:` (from `graphrag.tracing_llamaindex`), then `t.finish(question, answer)` |
+| DSPy | `pip install "graphweave[dspy]"`, run the program inside `with DSPyTracer() as t:` (from `graphrag.tracing_dspy`), then `t.finish()`. It records the passages each predictor was given |
 | OpenTelemetry / OpenInference | `graphweave import-otel spans.json` reads OTLP JSON or SDK span JSON lines and writes one trace per run |
 
 ## Check the used/unused marks
