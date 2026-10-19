@@ -35,6 +35,27 @@ Prefer tools over a skill? `pip install "graphweave[mcp]"` adds a local MCP serv
 
 Repeat questions are faster: GitHub responses are kept in `graphweave_out/cache` and re-checked on every run, so results are never stale. Add `--no-cache` to skip it.
 
+## Trace your own agent
+
+| Your stack | Do this |
+| --- | --- |
+| Anything | `capture(question, items, answer=answer)` then `save(trace, "run.json")` from `graphrag.tracing` |
+| LangGraph | `pip install "graphweave[adapter]"`, pass `graphrag.tracing_langgraph.LangGraphTracer()` as a callback |
+| LlamaIndex | `pip install "graphweave[llamaindex]"`, wrap queries in `with LlamaIndexTracer() as t:` (from `graphrag.tracing_llamaindex`), then `t.finish(question, answer)` |
+| OpenTelemetry / OpenInference | `graphweave import-otel spans.json` reads OTLP JSON or SDK span JSON lines and writes one trace per run |
+
+## Check the used/unused marks
+
+An item is **used** when the words it shares with the answer are at least 20% of the smaller of the two. That is a cheap guess, so you can test it:
+
+```bash
+graphweave verify graphweave_out/run.json
+```
+
+This asks a model the question once with every item, then once with each item removed, and marks an item *needed* when removing it changes the answer more than two identical runs differ. It needs `pip install "graphweave[verify]"` and an `OPENROUTER_API_KEY` (or `OPENAI_API_KEY`), and costs one model call per item plus two.
+
+On 20 questions and 171 retrieved items, the word-overlap marks agreed with leave-one-out on 71% of items and found 73% of the items the answer needed.
+
 ## In your browser
 
 The map shows the pull requests, issues, commits and people behind the answer and how they connect. Below it, **Retrieved vs used** marks which items the answer actually draws on, then the steps taken and the answer itself. Open a folder instead of a file to switch between saved questions.
