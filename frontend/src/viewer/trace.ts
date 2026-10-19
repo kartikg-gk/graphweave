@@ -32,7 +32,7 @@ export function overlap(item: TraceItem, answer?: string | null): number | null 
   if (answer == null) return null;
   const used = tokens(answer); const source = tokens(item.content);
   if (!used.size || !source.size) return 0;
-  return [...source].filter((word) => used.has(word)).length / source.size;
+  return [...source].filter((word) => used.has(word)).length / Math.min(used.size, source.size);
 }
 export function parseTrace(input: unknown): TraceFile {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Trace must be a JSON object.");

@@ -5,8 +5,8 @@ open the report and answer from it without parsing the trace format: what was
 asked, what was answered, which retrieved items the answer drew on, which it
 did not, and where each link in the graph came from.
 
-The used/unused split is the same measurement the viewer applies: the share of
-an item's words that reach the answer, judged at ``DEFAULT_THRESHOLD``. An item
+The used/unused split is the same measurement the viewer applies: the words an
+item shares with the answer, over the smaller of the two, judged at ``DEFAULT_THRESHOLD``. An item
 the trace already measured keeps its number; one it did not is measured here.
 """
 

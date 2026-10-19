@@ -339,195 +339,42 @@ def test_repetition_in_the_answer_does_not_change_the_score():
     assert overlap_score("alpha", "alpha alpha alpha") == 1.0
 
 
-def test_the_ratio_is_item_coverage_not_answer_coverage():
-    """A long document is scored on how much of it the answer took up.
-
-    The denominator is the item. This document supplies the whole answer and
-    still scores 1/201, because 200 of its 201 tokens went unused. Dividing by
-    the answer instead would make it 1.0.
-    """
+def test_the_ratio_divides_by_the_smaller_side():
+    """A long item that supplied the whole answer scores 1.0, not 1/201."""
     long_item = "alpha " + " ".join(f"unrelated{n}" for n in range(200))
 
-    assert overlap_score(long_item, "alpha") == pytest.approx(1 / 201)
+    assert overlap_score(long_item, "alpha") == 1.0
 
 
-# --------------------------------------------------------------------------
-# long documents, which the verification corpus cannot reach
-#
-# Measured: the longest text anywhere in the corpus is 20 tokens, and the two
-# possible denominators only start disagreeing above roughly 36. So every
-# document the suite otherwise sees is too short to tell them apart, and the
-# behaviour below is invisible on the corpus while being decisive on real
-# input. These fixtures are the missing evidence.
-#
-# Real source files in this repository average 8,378 bytes — hundreds of
-# tokens. The constructed sizes below are conservative.
-#
-# What they pin is the cost of dividing by the item: a file that supplied
-# every token of the answer falls under the threshold once it carries about
-# 36 tokens it did not contribute, and keeps falling from there. Anyone
-# reading a trace over real source files needs to know the scores are
-# compressed toward zero by document length, and that a low score means "this
-# file was mostly unused" rather than "this file did not contribute".
-# --------------------------------------------------------------------------
+def test_a_short_item_echoed_in_a_long_answer_scores_high():
+    answer = "alpha " + " ".join(f"word{n}" for n in range(50))
+
+    assert overlap_score("alpha bravo", answer) == pytest.approx(0.5)
+
 
 SUPPLIED_ANSWER = "auth middleware rejected expired tokens expiry comparison strict"
 
 
 def supplying_document(unused_tokens: int) -> str:
-    """A file that supplied the entire answer, plus unrelated content.
-
-    The realistic shape of a retrieved source file: one function the answer
-    quoted, and a few hundred lines that have nothing to do with the question.
-    """
+    """A file that supplied the entire answer, plus unrelated content."""
     tail = " ".join(f"unrelated_symbol_{n}" for n in range(unused_tokens))
     return f"{SUPPLIED_ANSWER} {tail}"
 
 
-def answer_coverage(content: str, answer: str) -> float:
-    """The other denominator, for comparison only.
+@pytest.mark.parametrize("unused_tokens", [0, 50, 300, 2000])
+def test_a_long_document_that_supplied_the_answer_is_used(unused_tokens):
+    """Length no longer decides the verdict: the file supplied every answer token."""
+    score = overlap_score(supplying_document(unused_tokens), SUPPLIED_ANSWER)
 
-    Not imported from anywhere: nothing in the project computes this. It is
-    here so the choice of denominator can be asserted against the alternative
-    instead of against a description of it.
-    """
-    from src.tracing._text import tokens
-
-    answer_tokens = tokens(answer)
-    item_tokens = tokens(content)
-    if not answer_tokens or not item_tokens:
-        return 0.0
-    return len(answer_tokens & item_tokens) / len(answer_tokens)
+    assert score == pytest.approx(1.0)
+    assert is_used(score) is True
 
 
-def test_a_long_document_that_supplied_the_answer_is_ignored():
-    """What dividing by the item costs, on the case the corpus cannot reach.
+def test_a_long_document_that_supplied_little_is_unused():
+    document = "auth " + " ".join(f"unrelated_symbol_{n}" for n in range(300))
 
-    A file supplies every token of the answer and carries 300 tokens of
-    unrelated content. Scored on the item, it is 8 useful tokens out of 308
-    and falls far below the threshold — the answer quoted it and the trace
-    records it as ignored.
-
-    Pinned rather than hidden. A reader who sees this item marked ignored
-    should be able to find out here why, instead of concluding the classifier
-    is broken.
-    """
-    document = supplying_document(300)
-    score = overlap_score(document, SUPPLIED_ANSWER)
-
-    assert score < DEFAULT_THRESHOLD
-    assert is_used(score) is False
-
-
-def test_the_other_denominator_would_have_kept_that_document():
-    """The alternative, asserted so the trade-off stays visible in the suite."""
-    document = supplying_document(300)
-
-    assert answer_coverage(document, SUPPLIED_ANSWER) == pytest.approx(1.0)
-    assert is_used(answer_coverage(document, SUPPLIED_ANSWER)) is True
-
-
-@pytest.mark.parametrize("unused_tokens", [50, 100, 500, 2000])
-def test_the_score_falls_as_the_unused_tail_grows(unused_tokens):
-    """Length decides the score on this side. That is the entire point.
-
-    The same eight contributed tokens score progressively lower as the file
-    around them grows, and are ignored at every size here.
-    """
-    document = supplying_document(unused_tokens)
-    score = overlap_score(document, SUPPLIED_ANSWER)
-
-    assert score == pytest.approx(8 / (8 + unused_tokens))
-    assert is_used(score) is False
-    assert answer_coverage(document, SUPPLIED_ANSWER) == pytest.approx(1.0)
-
-
-def test_the_two_denominators_agree_on_a_short_document():
-    """Why the corpus cannot catch this: at corpus length they agree.
-
-    Pinned so the disagreement above cannot be dismissed as an artifact of the
-    ratio. Below the crossover both denominators mark the same document used,
-    which is why 14 short documents say nothing either way.
-    """
-    document = supplying_document(0)
-
-    assert is_used(overlap_score(document, SUPPLIED_ANSWER)) is True
-    assert is_used(answer_coverage(document, SUPPLIED_ANSWER)) is True
-
-
-def test_an_item_longer_than_the_ceiling_allows_cannot_reach_the_threshold():
-    """The ceiling is a property of length, not of relevance.
-
-    The intersection cannot exceed the answer, so an answer of ``N`` tokens
-    caps every score at ``N / |I|``. Clearing threshold ``t`` needs
-    ``|I| <= N / t`` — at 0.2, ``|I| <= 5N``. The item below contains the
-    *entire* answer and still fails, because it carries more than ``5N``
-    tokens and the surplus is denominator it can never match.
-
-    **Failing this means items became chunk-sized, which is the fix rather
-    than a regression.** The response to items clustering under the threshold
-    is to retrieve smaller units, not to lower the cutoff: a threshold loose
-    enough to admit a thousand-token file admits everything and the
-    measurement stops discriminating.
-    """
-    answer_length = len(tokens(SUPPLIED_ANSWER))
-    limit = answer_length / DEFAULT_THRESHOLD
-
-    # One token past the limit, holding every answer token there is.
-    document = supplying_document(int(limit) + 1 - answer_length)
-
-    assert len(tokens(document)) > limit
-    assert tokens(SUPPLIED_ANSWER) <= tokens(document)
-    assert overlap_score(document, SUPPLIED_ANSWER) < DEFAULT_THRESHOLD
+    assert overlap_score(document, SUPPLIED_ANSWER) == pytest.approx(1 / 8)
     assert is_used(overlap_score(document, SUPPLIED_ANSWER)) is False
-
-
-def test_an_item_at_the_ceiling_still_reaches_the_threshold():
-    """The bound is exactly 5N, not approximately.
-
-    Asserted alongside the failure above so the limit cannot drift in either
-    direction without one of the two going red.
-    """
-    answer_length = len(tokens(SUPPLIED_ANSWER))
-    at_limit = int(answer_length / DEFAULT_THRESHOLD)
-
-    document = supplying_document(at_limit - answer_length)
-
-    assert len(tokens(document)) == at_limit
-    assert overlap_score(document, SUPPLIED_ANSWER) == pytest.approx(
-        DEFAULT_THRESHOLD
-    )
-    assert is_used(overlap_score(document, SUPPLIED_ANSWER)) is True
-
-
-def test_the_ceiling_is_length_alone_and_not_content():
-    """Two items of the same length score the same ceiling, however relevant."""
-    answer_length = len(tokens(SUPPLIED_ANSWER))
-    padding = 200
-
-    everything = supplying_document(padding)
-    half = " ".join(SUPPLIED_ANSWER.split()[: answer_length // 2]) + " " + " ".join(
-        f"unrelated_symbol_{n}" for n in range(padding + answer_length // 2)
-    )
-
-    assert len(tokens(everything)) == len(tokens(half))
-    assert overlap_score(everything, SUPPLIED_ANSWER) > overlap_score(
-        half, SUPPLIED_ANSWER
-    )
-    # Both are under the threshold: the more relevant one is not rescued.
-    assert is_used(overlap_score(everything, SUPPLIED_ANSWER)) is False
-    assert is_used(overlap_score(half, SUPPLIED_ANSWER)) is False
-
-
-def test_the_crossover_sits_where_it_was_measured():
-    """The supplying document is dropped between 25 and 50 spare tokens.
-
-    A change here means the tokenizer or ``DEFAULT_THRESHOLD`` moved. Read
-    which — the crossover is the number that decides whether the corpus can
-    exercise this case at all, and the corpus tops out at 20 tokens.
-    """
-    assert is_used(overlap_score(supplying_document(25), SUPPLIED_ANSWER)) is True
-    assert is_used(overlap_score(supplying_document(50), SUPPLIED_ANSWER)) is False
 
 
 # --------------------------------------------------------------------------
@@ -537,8 +384,8 @@ def test_the_crossover_sits_where_it_was_measured():
 # so they score identically under a 20-word list and a 96-word one. This one
 # is built the opposite way.
 #
-# The list-sensitive words live in the ITEM, not the answer. The score divides
-# by the item's token count, so a stopword list can only move the denominator
+# The list-sensitive words live in the ITEM, not the answer. When the item is
+# the smaller side the score divides by its token count, so a stopword list can only move the denominator
 # by removing item tokens — words dropped from the answer change the
 # intersection at most, and usually nothing. An earlier version of this
 # fixture put them in the answer and stopped detecting anything the moment the

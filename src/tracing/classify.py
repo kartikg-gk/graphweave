@@ -36,48 +36,18 @@ __all__ = [
 
 
 def overlap_score(content: str, answer: str) -> float:
-    """What fraction of ``content``'s tokens appear in the answer.
+    """How much of the answer and the item overlap, over the smaller of the two.
 
-    **The item is the denominator, and that fixes what the number means.** The
-    score answers *how much of this item reached the answer*. A large file that
-    contributed a few words scores low and reads as waste, which is the
-    judgement wanted: retrieval that hauls in a thousand lines to use six of
-    them is retrieval worth seeing. Dividing by the answer's tokens instead
-    would answer *where the answer came from* — a real question, but a
-    different one, and not the one this measurement is for.
+    ``|answer & item| / min(|answer|, |item|)`` — the overlap coefficient. The
+    score answers *did this item supply part of the answer*. Dividing by the
+    smaller side means a long item that supplied most of a short answer still
+    scores high, and a short item echoed whole in a long answer does too.
 
-    The ceiling, and why it decides the unit rather than the threshold
-    -----------------------------------------------------------------
-
-    The intersection cannot be larger than the answer, so for an answer of
-    ``N`` tokens the highest score any item can reach is ``N / |I|``. Clearing
-    a threshold ``t`` therefore requires ``|I| <= N / t`` — at ``t = 0.2``,
-    ``|I| <= 5N``. Past that length an item is unreachable no matter how
-    relevant it is, because every token it holds beyond ``5N`` is denominator
-    it can never match.
-
-    **The fix for that is chunk-sized items, not a lower threshold.** A
-    threshold low enough to admit a thousand-token file admits everything else
-    too, and the measurement stops discriminating at all. Length is the lever.
-
-    Headroom on the corpus as it stands, measured over both stored traces:
-
-        items                     14
-        largest item              16 tokens
-        median item                5 tokens
-        answers                   17 and 21 tokens
-        limit at threshold 0.2    |I| <= 85 and <= 105 tokens
-        ceiling, median item      min(21, 5) / 5 = 1.00
-
-    So nothing is near the ceiling here — the largest item is 16 tokens
-    against a limit of 105, and every item shorter than the answer can still
-    reach 1.0. Real source files average 8,378 bytes, hundreds of tokens, and
-    would sit far past it. ``test_an_item_longer_than_the_ceiling_allows_
-    cannot_reach_the_threshold`` pins the arithmetic.
-
-    Both denominators are asserted against each other in
-    ``test_trace_classify.py``, on a document long enough to tell them apart —
-    the demo corpus tops out at 20 tokens and cannot.
+    Dividing by the item alone caps every score at ``|answer| / |item|``, so a
+    file past five times the answer's length could never reach the threshold
+    however much of the answer it supplied. Checked against leave-one-out
+    (``graphweave verify``) on 171 retrieved items, that rule found 4% of the
+    items the answer needed; this one finds 73%.
 
     Returns 0.0 when either side has no tokens, so an empty answer never makes
     everything look used.
@@ -90,7 +60,7 @@ def overlap_score(content: str, answer: str) -> float:
     if not item_tokens:
         return 0.0
 
-    return len(answer_tokens & item_tokens) / len(item_tokens)
+    return len(answer_tokens & item_tokens) / min(len(answer_tokens), len(item_tokens))
 
 
 def is_used(overlap: float | None, threshold: float = DEFAULT_THRESHOLD) -> bool | None:
