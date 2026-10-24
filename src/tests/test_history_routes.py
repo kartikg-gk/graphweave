@@ -20,7 +20,7 @@ ALICE = "user_alice"
 BOB = "user_bob"
 NOT_AVAILABLE = {"detail": "no such session"}
 SESSION_FIELDS = {"id", "user_id", "title", "created_at"}
-TRACE_FIELDS = {"id", "session_id", "query", "execution_plan", "graph_payload", "graph_id", "created_at"}
+TRACE_FIELDS = {"id", "session_id", "query", "execution_plan", "graph_payload", "graph_id", "created_at", "answer", "answer_status"}
 
 
 @pytest.fixture()
@@ -160,6 +160,8 @@ def test_traces_come_back_oldest_first(client, engine):
     assert rows[0]["execution_plan"] == {"intent": {"type": "relational"}}
     assert rows[0]["graph_payload"] == [{"id": "pr:1"}]
     assert rows[0]["session_id"] == session.id
+    assert rows[0]["answer"] is None
+    assert rows[0]["answer_status"] == "pending"
     _iso(rows[0]["created_at"])
 
 
@@ -167,6 +169,44 @@ def test_a_session_with_no_traces_lists_none(client):
     session_id = client.post("/api/sessions", json={}).json()["id"]
 
     assert client.get(f"/api/sessions/{session_id}/traces").json() == []
+
+
+def test_completed_answer_is_saved_on_the_existing_trace(client, engine):
+    session = create_or_rename_session(ALICE, "asked", engine=engine)
+    trace_id = persist_trace(
+        session_id=session.id, query="who?", execution_plan={},
+        graph_payload=[{"id": "pr:1"}], graph_id="graph.json", engine=engine,
+    )
+    response = client.put(f"/api/traces/{trace_id}/answer", json={"answer": "Ada fixed it."})
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Ada fixed it."
+    assert response.json()["answer_status"] == "complete"
+    assert response.json()["graph_payload"] == [{"id": "pr:1"}]
+    assert response.json()["graph_id"] == "graph.json"
+    assert client.get(f"/api/sessions/{session.id}/traces").json() == [response.json()]
+
+
+def test_legacy_object_payload_keeps_its_results_when_answer_is_saved(client, engine):
+    session = create_or_rename_session(ALICE, "asked", engine=engine)
+    trace_id = persist_trace(
+        session_id=session.id, query="who?", execution_plan={},
+        graph_payload={"results": [{"id": "pr:1"}], "legacy": True}, engine=engine,
+    )
+    response = client.put(f"/api/traces/{trace_id}/answer", json={"answer": "Ada."})
+    assert response.status_code == 200
+    assert response.json()["graph_payload"] == {"results": [{"id": "pr:1"}], "legacy": True}
+
+
+def test_answer_save_refuses_other_users_and_missing_traces_equally(client, engine):
+    theirs = create_or_rename_session(BOB, "private", engine=engine)
+    trace_id = persist_trace(
+        session_id=theirs.id, query="secret", execution_plan={}, graph_payload=[], engine=engine,
+    )
+    for candidate in (trace_id, "missing-trace"):
+        response = client.put(f"/api/traces/{candidate}/answer", json={"answer": "stolen"})
+        assert response.status_code == 404
+        assert response.json() == NOT_AVAILABLE
+    assert client.get("/api/sessions").json() == []
 
 
 def test_reading_someone_elses_traces_is_not_found(client, engine):

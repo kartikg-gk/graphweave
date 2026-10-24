@@ -48,6 +48,11 @@ class AnswerRequest(BaseModel):
 
     query: str
     context: str
+    stream_events: bool = False
+
+
+class SaveTraceAnswer(BaseModel):
+    answer: str
 
 
 class SwitchRequest(BaseModel):
@@ -92,6 +97,8 @@ class TraceRead(ContractModel):
     graph_payload: dict | list
     created_at: datetime
     graph_id: str | None = None
+    answer: str | None = None
+    answer_status: str = "pending"
 
 
 class ResultDocumentRead(ContractModel):
