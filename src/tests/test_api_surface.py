@@ -24,6 +24,7 @@ from src.tests.contract_fixtures import trace_log
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 PINNED_ROUTES = {
+    ("PUT", "/api/traces/{trace_id}/answer"),
     ("POST", "/api/trace"),
     ("POST", "/api/subgraph"),
     ("POST", "/api/summarize"),
@@ -689,6 +690,22 @@ def test_a_stream_that_fails_part_way_keeps_what_it_sent(client, model):
     model.stream_parts = ["Partial ", RuntimeError("cut")]
 
     assert client.post("/api/answer/stream", json={"query": "q", "context": "ctx"}).text == "Partial "
+
+
+def test_event_stream_marks_only_complete_answers_done(client, model):
+    import json
+
+    model.stream_parts = ["Ada ", "fixed it."]
+    body = {"query": "q", "context": "ctx", "stream_events": True}
+    response = client.post("/api/answer/stream", json=body)
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [event["type"] for event in events] == ["token", "token", "done"]
+    assert "".join(event["text"] for event in events if event["type"] == "token") == "Ada fixed it."
+
+    model.stream_parts = ["Partial ", RuntimeError("cut")]
+    response = client.post("/api/answer/stream", json={**body, "query": "other"})
+    events = [json.loads(line) for line in response.text.splitlines()]
+    assert [event["type"] for event in events] == ["token", "error"]
 
 
 # ==========================================================================

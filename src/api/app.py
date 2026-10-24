@@ -516,28 +516,43 @@ def answer_stream(
     """The answer as plain text, sent piece by piece while the model writes it."""
 
     def pieces():
+        def emit(kind: str, value: str = "") -> str:
+            if req.stream_events:
+                import json
+
+                return json.dumps({"type": kind, "text": value}) + "\n"
+            return value
+
         # Looked up when the stream starts, not when the route returns.
         key, remembered, prompt = _prepared_answer(req)
         if remembered is not None or prompt is None:
-            yield NO_CONTEXT_ANSWER if remembered is None else remembered
+            yield emit("token", NO_CONTEXT_ANSWER if remembered is None else remembered)
+            if req.stream_events:
+                yield emit("done")
             return
         sent: list[str] = []
         try:
             for piece in _stream_completion(prompt, ANSWER_MAX_TOKENS):
                 sent.append(piece)
-                yield piece
+                yield emit("token", piece)
         except Exception as exc:  # noqa: BLE001 - the response has already begun
             logger.warning("the answer stream broke off: %s", exc)
-            if not sent:
+            if req.stream_events:
+                yield emit("error", STREAM_FAILED_ANSWER)
+            elif not sent:
                 yield STREAM_FAILED_ANSWER
             return
         whole = "".join(sent).strip()
         if whole:
             ANSWER_CACHE.set(key, whole)
+            if req.stream_events:
+                yield emit("done")
+        elif req.stream_events:
+            yield emit("error", STREAM_FAILED_ANSWER)
 
     return StreamingResponse(
         pieces(),
-        media_type="text/plain; charset=utf-8",
+        media_type="application/x-ndjson" if req.stream_events else "text/plain; charset=utf-8",
         headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
     )
 

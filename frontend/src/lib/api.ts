@@ -139,6 +139,8 @@ export interface TraceRecord {
   graph_payload: ApiResult[] | Record<string, unknown>;
   created_at: string;
   graph_id?: string | null;
+  answer: string | null;
+  answer_status: "pending" | "complete";
 }
 
 async function headersFor(init: RequestInit): Promise<Headers> {
@@ -225,7 +227,7 @@ export async function summarize(key: string, text: string): Promise<ApiSummaryRe
   return response;
 }
 
-const answerKey = (query: string, context: string) => `${query}::${context.length}`;
+const answerKey = (query: string, context: string) => JSON.stringify([query, context]);
 
 export async function answer(query: string, context: string): Promise<ApiAnswerResponse> {
   const key = answerKey(query, context);
@@ -249,28 +251,41 @@ export async function streamAnswer(
   }
   const response = await rawRequest("/api/answer/stream", {
     method: "POST",
-    body: JSON.stringify({ query, context }),
+    body: JSON.stringify({ query, context, stream_events: true }),
   });
-  if (!response.body) {
-    const fallback = await answer(query, context);
-    onToken(fallback.answer);
-    return fallback.answer;
-  }
+  if (!response.body) throw new Error("Answer stream is unavailable.");
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let cumulative = "";
+  let pending = "";
+  let completed = false;
+  const consume = (line: string) => {
+    if (!line) return;
+    const event = JSON.parse(line) as { type: string; text?: string };
+    if (event.type === "token") {
+      cumulative += event.text ?? "";
+      onToken(cumulative);
+    } else if (event.type === "done") completed = true;
+    else if (event.type === "error") throw new Error(event.text || "Answer generation failed.");
+  };
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
-    cumulative += decoder.decode(value, { stream: true });
-    onToken(cumulative);
+    pending += decoder.decode(value, { stream: true });
+    const lines = pending.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) consume(line);
   }
-  cumulative += decoder.decode();
-  if (cumulative) {
-    onToken(cumulative);
-    answerCache.set(key, cumulative);
-  }
+  consume(pending + decoder.decode());
+  if (!completed || !cumulative.trim()) throw new Error("Answer stream ended before completion.");
+  answerCache.set(key, cumulative);
   return cumulative;
+}
+
+export function saveTraceAnswer(traceId: string, answerText: string): Promise<TraceRecord> {
+  return request<TraceRecord>(`/api/traces/${encodeURIComponent(traceId)}/answer`, {
+    method: "PUT", body: JSON.stringify({ answer: answerText }),
+  });
 }
 
 export function createSession(title: string, email?: string, sessionId?: string): Promise<SessionSummary> {
@@ -472,6 +487,7 @@ export function adaptToTraceState(
 
   return {
     id: response.trace_id ?? `trace_${Date.now().toString(36)}`,
+    traceId: response.trace_id,
     query,
     computedAt: new Date().toISOString(),
     weights: {
@@ -522,11 +538,11 @@ export async function traceFromDemoRun(run: DemoRun): Promise<TraceState> {
 export async function runTraceQuery(
   query: string,
   sessionId?: string,
-  onContext?: (context: string) => void,
+  onContext?: (context: string, traceId: string | null | undefined) => void,
 ): Promise<TraceState> {
   const started = performance.now();
   const response = await fetchTrace(query, sessionId);
-  onContext?.(response.context);
+  onContext?.(response.context, response.trace_id);
   const ids = allTraceNodeIds(response);
   const subgraph = ids.length === 0 ? EMPTY_SUBGRAPH : await fetchSubgraph(ids);
   return adaptToTraceState(query, response, subgraph, performance.now() - started);

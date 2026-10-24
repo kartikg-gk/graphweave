@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from .. import history
 from .auth import get_current_user
-from .models import SessionRead, SessionUpsert, TraceRead
+from .models import SaveTraceAnswer, SessionRead, SessionUpsert, TraceRead
 
 router = APIRouter(prefix="/api", tags=["history"])
 
@@ -74,3 +74,19 @@ async def session_traces(
     except history.SessionNotAvailable:
         raise _not_available() from None
     return [TraceRead(**asdict(record)) for record in records]
+
+
+@router.put("/traces/{trace_id}/answer", response_model=TraceRead)
+async def save_trace_answer(
+    trace_id: str,
+    body: SaveTraceAnswer,
+    user_id: str = Depends(get_current_user),
+) -> TraceRead:
+    """Attach a finished answer to one of the caller's recorded traces."""
+    if not body.answer.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="empty answer")
+    try:
+        record = await asyncio.to_thread(history.save_trace_answer, user_id, trace_id, body.answer)
+    except history.SessionNotAvailable:
+        raise _not_available() from None
+    return TraceRead(**asdict(record))

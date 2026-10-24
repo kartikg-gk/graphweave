@@ -11,6 +11,6 @@ export interface RouterConfidence { score: number; uncertainty: number; rational
 export type StepStatus = "complete" | "active" | "pending";
 export interface ExecutionStep { id: string; index: number; title: string; detail: string; status: StepStatus; badge?: string; arm?: "vector" | "graph"; durationMs?: number; }
 export interface TraceMetrics { tokens?: { used: number; budget: number; reductionPct: number }; peakRamGb?: number; queryTimeSec: number; nodesEvaluated?: number; }
-export interface TraceState { id: string; query: string; computedAt: string; weights: RouterWeights;
+export interface TraceState { id: string; traceId?: string | null; query: string; computedAt: string; weights: RouterWeights;
   confidence: RouterConfidence; steps: ExecutionStep[]; metrics: TraceMetrics;
   graph: { nodes: TraceNode[]; edges: TraceEdge[] }; context?: string; }

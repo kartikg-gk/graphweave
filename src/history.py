@@ -88,6 +88,8 @@ class TraceRecord:
     graph_payload: Any
     created_at: datetime
     graph_id: str | None = None
+    answer: str | None = None
+    answer_status: str = "pending"
 
 
 # --------------------------------------------------------------------------
@@ -206,6 +208,8 @@ def list_traces(
             graph_payload=_graph_results(row.graph_payload),
             created_at=row.created_at,
             graph_id=_graph_id(row.graph_payload),
+            answer=_answer(row.graph_payload),
+            answer_status=_answer_status(row.graph_payload),
         )
         for row in rows
     ]
@@ -278,6 +282,37 @@ def persist_trace(
         return None
 
 
+def save_trace_answer(
+    user_id: str, trace_id: str, answer: str, *, engine: Engine | None = None
+) -> TraceRecord:
+    """Save a completed answer on a trace owned by the caller."""
+    made = engine if engine is not None else create_history_engine()
+    with history_sessions(made)() as db:
+        row = db.get(TraceLog, trace_id)
+        if row is None:
+            raise SessionNotAvailable(trace_id)
+        _owned(db, row.session_id, user_id)
+        payload = row.graph_payload
+        if isinstance(payload, dict) and "results" in payload and (
+            "graph_id" in payload or "answer_status" in payload
+        ):
+            stored = dict(payload)
+        else:
+            stored = {"results": payload}
+        stored.update(answer=answer, answer_status="complete")
+        row.graph_payload = stored
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return TraceRecord(
+            id=row.id, session_id=row.session_id, query=row.query,
+            execution_plan=row.execution_plan,
+            graph_payload=_graph_results(row.graph_payload),
+            created_at=row.created_at, graph_id=_graph_id(row.graph_payload),
+            answer=_answer(row.graph_payload), answer_status=_answer_status(row.graph_payload),
+        )
+
+
 def _graph_id(payload: Any) -> str | None:
     """The graph recorded in a wrapped payload, absent on legacy traces."""
     if not isinstance(payload, dict):
@@ -286,9 +321,22 @@ def _graph_id(payload: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _answer(payload: Any) -> str | None:
+    value = payload.get("answer") if isinstance(payload, dict) else None
+    return value if isinstance(value, str) else None
+
+
+def _answer_status(payload: Any) -> str:
+    if isinstance(payload, dict) and payload.get("answer_status") == "complete":
+        return "complete"
+    return "pending"
+
+
 def _graph_results(payload: Any) -> Any:
     """Expose the original result payload while keeping provenance internal."""
-    if isinstance(payload, dict) and "graph_id" in payload and "results" in payload:
+    if isinstance(payload, dict) and "results" in payload and (
+        "graph_id" in payload or "answer_status" in payload
+    ):
         return payload["results"]
     return payload
 

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 
 import {
   API_BASE, ApiError, createSession, loadDemoRuns, traceFromDemoRun, type DemoRun, fetchGraphs, fetchSessionTraces, fetchSuggestions,
-  hydrateTraceFromLog, listSessions, runTraceQuery, streamAnswer, switchGraph as switchGraphApi,
+  hydrateTraceFromLog, listSessions, runTraceQuery, saveTraceAnswer, streamAnswer, switchGraph as switchGraphApi,
   type ApiGraph, type SessionSummary, type Suggestion, type TraceRecord,
 } from "@/lib/api";
 import { sampleTrace } from "@/lib/sampleTrace";
@@ -308,20 +308,36 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
     try {
       // The answer needs only the trace's context, not the subgraph, so it
       // starts streaming as soon as the trace returns.
-      let answering: Promise<void> | null = null;
+      let answering: Promise<string> | null = null;
       const current = () => epoch === queryEpoch.current && !abandoned;
-      const startAnswer = (context: string) => {
+      const startAnswer = (context: string, traceId?: string | null) => {
         if (epoch !== queryEpoch.current || !context?.trim()) return;
         setAnswer("");
         setAnswerStreaming(true);
         answering = streamAnswer(query, context, (text) => {
           if (current()) setAnswer(text);
         })
-          .then(() => undefined)
+          .then(async (completedAnswer) => {
+            if (sessionId && traceId) {
+              try {
+                const saved = await saveTraceAnswer(traceId, completedAnswer);
+                if (current()) setActiveTraces((rows) => [saved, ...rows.filter((row) => row.id !== saved.id)]);
+              } catch (error) {
+                console.error("[graphweave] Answer save failed", error);
+                toast.error("Answer shown, but it could not be saved to history.");
+              }
+            } else if (sessionId) {
+              toast.error("Answer shown, but this trace could not be saved to history.");
+            }
+            return completedAnswer;
+          })
           .catch((error) => {
-            if (!current()) return;
-            console.error("[graphweave] Answer stream failed", error);
-            setAnswer(null);
+            if (current()) {
+              console.error("[graphweave] Answer stream failed", error);
+              setAnswer(null);
+              toast.error("Answer generation stopped before completion.");
+            }
+            return "";
           })
           .finally(() => {
             if (current()) setAnswerStreaming(false);
@@ -458,6 +474,7 @@ export function StudioProvider({ children, identity = { userId: null, email: nul
       const hydrated = await hydrateTraceFromLog(record);
       if (epoch !== queryEpoch.current) return;
       setTrace(hydrated);
+      setAnswer(record.answer_status === "complete" ? record.answer : null);
       navigate("/");
     } catch (error) {
       if (epoch !== queryEpoch.current) return;
