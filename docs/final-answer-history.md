@@ -18,5 +18,6 @@ History graph expansion continues using the existing subgraph endpoint; this is
 not an immutable snapshot of the entire repository graph.
 
 Validation: focused API/history and frontend regression tests; both frontend
-builds. Independent Sol review was requested but encountered an account usage
-limit; do not describe that review as completed unless a later review succeeds.
+builds. Independent Sol review completed with no actionable findings. An earlier usage
+limit interrupted the first attempt; the final review completed after retry.
+
